@@ -3,7 +3,7 @@
 //  MedSolace
 //
 //  Created by Hiba Khalifah on 3/11/19.
-//  Copyright © 2019 MedSolace. All rights reserved.
+//  Copyright © 2019  ZetaTech Solutions. All rights reserved.
 //
 
 #import <UIKit/UIKit.h>
