@@ -16,6 +16,7 @@
 @property (nonatomic) UILabel *descriptionLabel;
 @property (nonatomic) UIImageView *imageView;
 @property (nonatomic) CGFloat verticalOffset;
+@property (nonatomic, strong) UIButton *button;
 @end
 
 @implementation EmptyDataSetView
@@ -23,7 +24,6 @@
 - (instancetype)init {
     self = [super init];
     if (self) {
-        [self addSubview:[self contentView]];
         [self setVerticalOffset:0];
     }
     return self;
@@ -33,8 +33,8 @@
     
     if (!_contentView) {
         _contentView = [UIView new];
-        [_contentView setTranslatesAutoresizingMaskIntoConstraints:NO];
         [_contentView setBackgroundColor:[UIColor clearColor]];
+        [_contentView setTranslatesAutoresizingMaskIntoConstraints:NO];
     }
     return _contentView;
 }
@@ -76,10 +76,32 @@
     return _imageView;
 }
 
-- (void) invalidateSubViews {
+- (UIButton *)button {
+ 
+    if (!_button) {
+         _button = [UIButton buttonWithType:UIButtonTypeCustom];
+        _button.translatesAutoresizingMaskIntoConstraints = NO;
+        _button.backgroundColor = [UIColor clearColor];
+        [_button setUserInteractionEnabled:YES];
+        _button.contentHorizontalAlignment = UIControlContentHorizontalAlignmentCenter;
+        _button.contentVerticalAlignment = UIControlContentVerticalAlignmentCenter;
+        [_button addTarget:self action:@selector(didTapButton:) forControlEvents:UIControlEventTouchUpInside];
+    }
+    return _button;
+}
+
+- (void)invalidateSubViews {
     _titleLabel = nil;
     _descriptionLabel = nil;
     _imageView = nil;
+    _button = nil;
+}
+
+- (void)didTapButton:(id)sender {
+    SEL selector = NSSelectorFromString(@"zt_didTapButton:");
+    if ([self.contentView.superview respondsToSelector:selector]) {
+        [self.contentView.superview performSelector:selector withObject:sender afterDelay:0.0f];
+    }
 }
 
 @end
@@ -87,13 +109,14 @@
 
 @interface UIScrollView ()
 
-@property EmptyDataSetView *emptyDataSetView;
+@property (retain) EmptyDataSetView *emptyDataSetView;
 
 @end
 
 static NSMutableDictionary *implementationLookupTable;
 static char const * const ZTEmptyDataSetViewKey = "emptyDataSetView";
 static char const * const ZTEmptyDataSetSourceKey = "emptyDataSetSource";
+static char const * const ZTEmptyDataSetDelegateKey = "emptyDataSetDelegate";
 static NSString * const ZTSwizzleInfoOwnerClassKey = @"ownerClass";
 static NSString * const ZTSwizzleInfoSelectorKey = @"selector";
 static NSString * const ZTSwizzleInfoPointerKey = @"pointer";
@@ -151,19 +174,28 @@ static NSString * const ZTSwizzleInfoPointerKey = @"pointer";
      return objc_getAssociatedObject(self, ZTEmptyDataSetSourceKey);
 }
 
-- (void)setEmptyDataSetSource:(id<ZTEmptyDataSetSource>)hibaEmptyDataSetSource {
-        objc_setAssociatedObject(self, ZTEmptyDataSetSourceKey, hibaEmptyDataSetSource , OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    
+- (void)setEmptyDataSetSource:(id<ZTEmptyDataSetSource>)emptyDataSetSource {
+        objc_setAssociatedObject(self, ZTEmptyDataSetSourceKey, emptyDataSetSource , OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         [self swizzleIfPossible:@selector(reloadData)];
         if ([self isKindOfClass:[UITableView class]]) {
             [self swizzleIfPossible:@selector(endUpdates)];
         }
 }
 
+#pragma mark - EmptyDataSetDelegate Accessors
+
+- (id<ZTEmptyDataSetDelegate>)emptyDataSetDelegate {
+    return objc_getAssociatedObject(self, ZTEmptyDataSetDelegateKey);
+}
+
+- (void)setEmptyDataSetDelegate:(id<ZTEmptyDataSetDelegate>)emptyDataSetDelegate {
+    objc_setAssociatedObject(self, ZTEmptyDataSetDelegateKey, emptyDataSetDelegate, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
 #pragma mark - EmptyDataSetView Accessors
 
-- (void)setEmptyDataSetView:(EmptyDataSetView *)hibaEmptyDataSetView {
-    objc_setAssociatedObject(self, ZTEmptyDataSetViewKey, hibaEmptyDataSetView , OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+- (void)setEmptyDataSetView:(EmptyDataSetView *)emptyDataSetView {
+    objc_setAssociatedObject(self, ZTEmptyDataSetViewKey, emptyDataSetView , OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 
 - (EmptyDataSetView *)emptyDataSetView {
@@ -174,7 +206,6 @@ static NSString * const ZTSwizzleInfoPointerKey = @"pointer";
 #pragma mark - EmptyDataSetView Setups
 
 - (void)setupEmptyDataSetView {
-    
     EmptyDataSetView *view = [self emptyDataSetView];
     
     if (!view) {
@@ -182,7 +213,7 @@ static NSString * const ZTSwizzleInfoPointerKey = @"pointer";
     }
     
     [self setEmptyDataSetView:view];
-    [[self superview] addSubview:view];
+    [self addSubview:view.contentView];
     
     if ([self emptyDataSetSource]) {
         
@@ -191,28 +222,31 @@ static NSString * const ZTSwizzleInfoPointerKey = @"pointer";
             [view.contentView addSubview:view.imageView];
             [self setupImageViewConstraints:view];
         }
-        
         if ([[self emptyDataSetSource] respondsToSelector:@selector(titleForEmptyDataSet:)]) {
             [[view titleLabel] setAttributedText:[[self emptyDataSetSource] titleForEmptyDataSet:self]];
             [view.contentView addSubview:view.titleLabel];
             [self setupTitleLabelConstraints:view];
         }
-        
         if ([[self emptyDataSetSource] respondsToSelector:@selector(descriptionForEmptyDataSet:)]) {
             [[view descriptionLabel] setAttributedText:[[self emptyDataSetSource] descriptionForEmptyDataSet:self]];
             [view.contentView addSubview:view.descriptionLabel];
             [self setupDescriptionLabelConstraints:view];
         }
-        
         if ([[self emptyDataSetSource] respondsToSelector:@selector(backgroundColorForEmptyDataSet:)]) {
             [view.contentView setBackgroundColor:[[self emptyDataSetSource] backgroundColorForEmptyDataSet:self]];
         }
         if ([[self emptyDataSetSource] respondsToSelector:@selector(verticalOffsetForEmptyDataSet:)]) {
             [view setVerticalOffset:[[self emptyDataSetSource] verticalOffsetForEmptyDataSet:self]];
         }
+
+        if ([[self emptyDataSetSource] respondsToSelector:@selector(emptyDataSet:enableEmptyDataSetButton:)]) {
+            if ([[self emptyDataSetSource] emptyDataSet:self enableEmptyDataSetButton:view.button]) {
+                [view.contentView addSubview:view.button];
+                [self setupButtonConstraints:view];
+            }
+        }
+        [self setupContentViewConstraints:view];
     }
-    [self setupContentViewConstraints:view];
-    
 }
 
 - (void)setupImageViewConstraints:(EmptyDataSetView *)view {
@@ -223,7 +257,7 @@ static NSString * const ZTSwizzleInfoPointerKey = @"pointer";
     
     [[NSLayoutConstraint constraintWithItem:view.contentView attribute:NSLayoutAttributeTrailing relatedBy:NSLayoutRelationEqual toItem:view.imageView  attribute:NSLayoutAttributeTrailing multiplier:1 constant:8] setActive:YES];
     
-    [[NSLayoutConstraint constraintWithItem:view.imageView attribute:NSLayoutAttributeHeight relatedBy:NSLayoutRelationEqual toItem:nil attribute:NSLayoutAttributeNotAnAttribute multiplier:1 constant:250] setActive:YES];
+    [[NSLayoutConstraint constraintWithItem:view.imageView attribute:NSLayoutAttributeHeight relatedBy:NSLayoutRelationEqual toItem:nil attribute:NSLayoutAttributeNotAnAttribute multiplier:1 constant:200] setActive:YES];
 }
 
 - (void)setupTitleLabelConstraints:(EmptyDataSetView *)view {
@@ -253,6 +287,15 @@ static NSString * const ZTSwizzleInfoPointerKey = @"pointer";
     [[[[self superview] trailingAnchor] constraintEqualToAnchor:[view.contentView trailingAnchor] constant:16] setActive:YES];
 }
 
+- (void)setupButtonConstraints:(EmptyDataSetView *)view {
+    
+    [[NSLayoutConstraint constraintWithItem:view.button attribute:NSLayoutAttributeHeight relatedBy:NSLayoutRelationEqual toItem:nil attribute:NSLayoutAttributeNotAnAttribute multiplier:1 constant:250] setActive:YES];
+    [[NSLayoutConstraint constraintWithItem:view.button attribute:NSLayoutAttributeCenterY relatedBy:NSLayoutRelationEqual toItem:view.contentView attribute:NSLayoutAttributeCenterY multiplier:1 constant:0] setActive:YES];
+   
+
+    [[[view.button leadingAnchor] constraintEqualToAnchor:[view.contentView leadingAnchor] constant:0] setActive:YES];
+    [[[view.contentView trailingAnchor] constraintEqualToAnchor:[view.button trailingAnchor] constant:0] setActive:YES];
+}
 
 #pragma mark - Swizzling Methods
 
@@ -353,9 +396,17 @@ void zt_swizzledImplementation(id self, SEL _cmd) {
     if ([self emptyDataSetView]) {
         
         [self.emptyDataSetView invalidateSubViews];
-        [self.emptyDataSetView removeFromSuperview];
+        [self.emptyDataSetView.contentView removeFromSuperview];
         [self setEmptyDataSetView:nil];
     }
 }
 
+#pragma mark - ZTEmptyViewDataSetDelegate
+- (void)zt_didTapButton:(id)sender {
+    if ([self emptyDataSetDelegate] && [[self emptyDataSetDelegate] respondsToSelector:@selector(emptyDataSet:didTapButton:)]) {
+        [[self emptyDataSetDelegate] emptyDataSet:self didTapButton:sender];
+    }
+}
+
 @end
+
